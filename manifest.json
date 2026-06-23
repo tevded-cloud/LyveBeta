@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "Lyve",
+  "version": "1.0",
+  "description": "Adds a live-style chat experience to YouTube videos.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "lyve@tevded",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": ["storage", "scripting"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://firestore.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["firebaseConfig.js", "background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "modules/chatPanel.js",
+        "modules/chatMessages.js",
+        "modules/emotes.js",
+        "modules/messageStore.js",
+        "modules/settings.js",
+        "assets/lyve-icon-16.png",
+        "assets/lyve-icon-32.png",
+        "assets/lyve-icon-48.png",
+        "assets/lyve-icon-128.png"
+      ],
+      "matches": ["https://www.youtube.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "assets/lyve-icon-16.png",
+    "32": "assets/lyve-icon-32.png",
+    "48": "assets/lyve-icon-48.png",
+    "128": "assets/lyve-icon-128.png"
+  },
+  "action": {
+    "default_title": "Lyve",
+    "default_icon": {
+      "16": "assets/lyve-icon-16.png",
+      "32": "assets/lyve-icon-32.png"
+    },
+    "default_popup": "popup.html"
+  }
+}

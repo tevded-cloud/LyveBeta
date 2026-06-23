@@ -1,0 +1,19 @@
+# Tooling / agent folders
+.agents/
+.codex/
+
+# Temporary icon working files
+lyve_temp_icon_pack/
+lyve_temp_icon_pack.zip
+
+# Internal / submission notes (not for the public repo)
+PRODUCT_CHECKLIST.md
+STORE_LISTING.md
+
+# Build artifacts
+*.zip
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
