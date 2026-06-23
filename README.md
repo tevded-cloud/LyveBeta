@@ -35,10 +35,11 @@ future messages, just like a live-stream replay.
 
 ### Chrome, Brave, Edge, Opera, Vivaldi (Chromium)
 
-**From the store (recommended once published):**
-1. Open the Lyve listing on the Chrome Web Store: _link coming once review completes_.
-2. Click **Add to Chrome / Add to Brave** and confirm.
-3. Open a YouTube video - the Lyve panel appears.
+1. Click the green **`< > Code`** button near the top of this page.
+2. Click **Download ZIP**.
+3. **Unzip** the file you downloaded.
+4. The folder inside it (the one containing `manifest.json`) is what the install steps call
+   "the project folder."
 
 **Manual / development install (load unpacked):**
 1. Download or clone this repository.
