@@ -489,6 +489,7 @@ function buildFirestoreMessageFields(videoId, message, firebaseUid, fallbackDisp
   };
 
   if (message?.id) fields.clientMessageId = { stringValue: String(message.id) };
+  if (message?.color) fields.color = { stringValue: String(message.color) };
   if (message?.badge) fields.badge = { stringValue: String(message.badge) };
   if (message?.accountCreatedAt) fields.accountCreatedAt = { timestampValue: toIsoTimestamp(message.accountCreatedAt) };
   if (message?.replyTo) fields.replyTo = toFirestoreValue(message.replyTo);
@@ -520,9 +521,11 @@ function firestoreDocumentToMessage(document) {
   };
 
   const badge = fromFirestoreValue(fields.badge);
+  const color = fromFirestoreValue(fields.color);
   const accountCreatedAt = fromFirestoreValue(fields.accountCreatedAt);
   const replyTo = fromFirestoreValue(fields.replyTo);
   if (badge) message.badge = String(badge);
+  if (color) message.color = String(color);
   if (accountCreatedAt) message.accountCreatedAt = accountCreatedAt;
   if (replyTo) message.replyTo = replyTo;
   return message;

@@ -196,7 +196,8 @@ function renderAtTime(currentTime, force = false) {
     userSpan.type = 'button';
     userSpan.className = 'chat-username';
     userSpan.textContent = msg.authorBanned ? 'Banned user' : (msg.user || 'Unknown');
-    if (msg.user === myName) userSpan.style.color = myColor;
+    if (/^#[0-9a-f]{6}$/i.test(msg.color || '')) userSpan.style.color = msg.color;
+    else if (msg.user === myName) userSpan.style.color = myColor;
     userSpan.dataset.displayName = msg.user || '';
     if (msg.userId) userSpan.dataset.userId = msg.userId;
     userSpan.dataset.time = String(msg.time ?? '');

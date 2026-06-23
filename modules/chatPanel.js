@@ -1188,6 +1188,7 @@ window.isLocked = isLocked;
       userId: account.uid || getOrCreateUserId(),
       accountCreatedAt: getOrCreateAccountCreatedAt(),
       user: myName,
+      color: getSetting('chatUserColor', '#3a6ff7'),
       badge: getSetting('chatSelfBadge', 'none'),
       text: messageText,
       time: Math.floor(video.currentTime),
