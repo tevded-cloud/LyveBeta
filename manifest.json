@@ -6,7 +6,15 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "lyve@tevded",
-      "strict_min_version": "115.0"
+      "strict_min_version": "115.0",
+      "data_collection_permissions": {
+        "required": [
+          "personallyIdentifyingInfo",
+          "authenticationInfo",
+          "personalCommunications",
+          "websiteContent"
+        ]
+      }
     }
   },
   "permissions": ["storage", "scripting"],
