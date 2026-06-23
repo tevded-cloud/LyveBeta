@@ -1,7 +1,7 @@
 # Lyve
 
 Lyve adds a live-style, time-synced chat to YouTube videos. Messages are anchored to the exact
-moment in the video they were posted, so chat unfolds in sync with playback — and rewinding hides
+moment in the video they were posted, so chat unfolds in sync with playback - and rewinding hides
 future messages, just like a live-stream replay.
 
 > Lyve is an independent third-party extension and is not affiliated with, endorsed by, or
@@ -12,7 +12,7 @@ future messages, just like a live-stream replay.
 ## Features
 
 - Time-synced chat that follows the video timeline (rewind hides future messages)
-- Free accounts (email/password) — sign in to post; viewing is read-only
+- Free accounts (email/password) - sign in to post; viewing is read-only
 - Personal display name, username color, and chat badges
 - 7TV emote support
 - Draggable, lockable chat panel with an in-video overlay mode
@@ -27,7 +27,7 @@ future messages, just like a live-stream replay.
 | Chrome | ✅ | Chrome Web Store (or load unpacked) |
 | Brave / Edge / Opera / Vivaldi | ✅ | Install the Chrome build (Chromium engine) |
 | Firefox | ✅ | Load as a temporary add-on, or via AMO once published |
-| Safari | ❌ | Not supported — Safari needs a separate native (Xcode) build |
+| Safari | ❌ | Not supported - Safari needs a separate native (Xcode) build |
 
 ---
 
@@ -38,7 +38,7 @@ future messages, just like a live-stream replay.
 **From the store (recommended once published):**
 1. Open the Lyve listing on the Chrome Web Store: _link coming once review completes_.
 2. Click **Add to Chrome / Add to Brave** and confirm.
-3. Open a YouTube video — the Lyve panel appears.
+3. Open a YouTube video - the Lyve panel appears.
 
 **Manual / development install (load unpacked):**
 1. Download or clone this repository.
@@ -69,7 +69,7 @@ account + App Store), which is not part of this repository.
 
 1. Open any YouTube video.
 2. Click the **gear → Account** in the Lyve panel and **create an account** or **sign in**.
-3. Post messages — they appear instantly and sync to others watching the same video.
+3. Post messages - they appear instantly and sync to others watching the same video.
 4. During private beta, posting requires an approved account.
 
 ---
