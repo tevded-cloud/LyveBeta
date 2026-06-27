@@ -1,5 +1,7 @@
 // modules/emotes.js  — ES module version of your current emotes.js (no logic changes)
 
+import { searchEmoji } from "./emojiData.js";
+
 // --- 1) Emoji/7tv picker styles ------------------------------------------
 export function injectEmojiStyles() {
   if (document.getElementById('emoji-picker-styles')) return;
@@ -7,7 +9,7 @@ export function injectEmojiStyles() {
   style.id = 'emoji-picker-styles';
   style.textContent = `
     .emote-picker{
-      position:fixed; z-index:100003;
+      position:fixed; z-index:2147483647;
       width:360px; background:#151515; color:#fff;
       border:1px solid rgba(255,255,255,0.12);
       border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.5);
@@ -20,6 +22,9 @@ export function injectEmojiStyles() {
       border-radius:8px;outline:none;font:12px Roboto,Arial,sans-serif;
     }
     .ep-search:focus{border-color:rgba(239,61,56,.75);box-shadow:0 0 0 3px rgba(239,61,56,.12)}
+    .ep-recent{display:flex;gap:6px;padding:2px 8px 6px;overflow-x:auto;overscroll-behavior:contain}
+    .ep-recent:empty{display:none}
+    .ep-recent .ep-item{flex:0 0 34px;width:34px;height:34px;font-size:18px}
     .ep-grid{
       display:grid; grid-template-columns:repeat(8, 1fr);
       grid-auto-rows:40px; gap:8px; padding:8px;
@@ -81,6 +86,29 @@ export function insertAtCursor(input, text) {
   input.focus();
 }
 
+// --- Recently used emotes ------------------------------------------------
+const RECENT_EMOTES_KEY = 'lyveRecentEmotes';
+const RECENT_EMOTES_MAX = 16;
+
+export function getRecentEmotes() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(RECENT_EMOTES_KEY) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+// Record an emote use (most-recent-first, de-duplicated, capped).
+export function recordEmoteUse(emote) {
+  if (!emote || !emote.name) return;
+  try {
+    const list = getRecentEmotes().filter(existing => existing.name !== emote.name);
+    list.unshift({ type: emote.type, name: emote.name, char: emote.char, url: emote.url });
+    localStorage.setItem(RECENT_EMOTES_KEY, JSON.stringify(list.slice(0, RECENT_EMOTES_MAX)));
+  } catch {}
+}
+
 // Insert a token with smart spaces: add a leading space if needed, always a trailing space
 export function insertTokenWithSpaces(input, token) {
   const v = input.value;
@@ -111,6 +139,7 @@ export function createEmojiPicker(panel, input, emojiBtn) {
   picker.innerHTML = `
     <div class="ep-header">Emotes</div>
     <input class="ep-search" type="search" placeholder="Search 7TV emotes" aria-label="Search 7TV emotes" autocomplete="off" />
+    <div class="ep-recent" aria-label="Recently used emotes"></div>
     <div class="ep-grid" tabindex="0" aria-label="Emote grid"></div>
     <div class="ep-categories">
       <button class="ep-tab ep-basic active" type="button">Basic</button>
@@ -124,6 +153,35 @@ export function createEmojiPicker(panel, input, emojiBtn) {
   const searchEl = picker.querySelector('.ep-search');
   const tabBasic = picker.querySelector('.ep-basic');
   const tab7tv   = picker.querySelector('.ep-7tv');
+  const recentEl = picker.querySelector('.ep-recent');
+
+  function renderRecent() {
+    recentEl.innerHTML = '';
+    getRecentEmotes().slice(0, 8).forEach(recent => {
+      const item = document.createElement('div');
+      item.className = 'ep-item';
+      if (recent.type === '7tv' && recent.url) {
+        const img = document.createElement('img');
+        img.src = recent.url; img.alt = recent.name; img.title = recent.name;
+        item.appendChild(img);
+        item.addEventListener('click', () => {
+          insertTokenWithSpaces(input, recent.name);
+          recordEmoteUse(recent);
+          renderRecent();
+        });
+      } else {
+        const ch = recent.char || recent.name;
+        item.textContent = ch;
+        item.title = ch;
+        item.addEventListener('click', () => {
+          insertAtCursor(input, ch);
+          recordEmoteUse(recent);
+          renderRecent();
+        });
+      }
+      recentEl.appendChild(item);
+    });
+  }
 
   function update7tvCount() {
     const c = picker.querySelector('.ep-count');
@@ -139,7 +197,11 @@ export function createEmojiPicker(panel, input, emojiBtn) {
         item.className = 'ep-item';
         item.textContent = ch;
         item.title = ch;
-        item.addEventListener('click', () => insertAtCursor(input, ch));
+        item.addEventListener('click', () => {
+          insertAtCursor(input, ch);
+          recordEmoteUse({ type: 'basic', name: ch, char: ch });
+          renderRecent();
+        });
         gridEl.appendChild(item);
       });
       return;
@@ -168,7 +230,11 @@ export function createEmojiPicker(panel, input, emojiBtn) {
       img.alt = e.name;
       img.title = e.name;
       item.appendChild(img);
-      item.addEventListener('click', () => insertTokenWithSpaces(input, e.name));
+      item.addEventListener('click', () => {
+        insertTokenWithSpaces(input, e.name);
+        recordEmoteUse({ type: '7tv', name: e.name, url });
+        renderRecent();
+      });
       gridEl.appendChild(item);
     });
   }
@@ -190,10 +256,15 @@ export function createEmojiPicker(panel, input, emojiBtn) {
     picker.style.top  = `${top}px`;
   }
 
-  // initial render
-  let mode = 'basic';
+  // initial render — restore the last-used tab.
+  let mode = localStorage.getItem('lyveEmoteTab') === '7tv' ? '7tv' : 'basic';
+  if (mode === '7tv') {
+    tab7tv.classList.add('active');
+    tabBasic.classList.remove('active');
+  }
   render(mode);
   update7tvCount();
+  renderRecent();
 
   searchEl.addEventListener('input', () => {
     if (searchEl.value.trim()) {
@@ -212,12 +283,14 @@ export function createEmojiPicker(panel, input, emojiBtn) {
     mode = 'basic';
     tabBasic.classList.add('active');
     tab7tv.classList.remove('active');
+    try { localStorage.setItem('lyveEmoteTab', 'basic'); } catch {}
     render(mode);
   });
   tab7tv.addEventListener('click', () => {
     mode = '7tv';
     tab7tv.classList.add('active');
     tabBasic.classList.remove('active');
+    try { localStorage.setItem('lyveEmoteTab', '7tv'); } catch {}
     update7tvCount();
     render(mode);
   });
@@ -237,7 +310,10 @@ export function createEmojiPicker(panel, input, emojiBtn) {
       requestAnimationFrame(positionPicker);
       update7tvCount();
       if (mode === '7tv') render('7tv');
-      requestAnimationFrame(() => searchEl.focus());
+      renderRecent();
+      // Focus the search immediately so the user can type to filter right away.
+      searchEl.focus();
+      requestAnimationFrame(() => { searchEl.focus(); searchEl.select(); });
     }
   });
 
@@ -267,7 +343,7 @@ export function injectAutocompleteStyles() {
   st.id = 'emote-ac-css';
   st.textContent = `
   .emote-ac{
-    position:fixed; z-index:100004; display:none;
+    position:fixed; z-index:2147483647; display:none;
     background:#151515; color:#fff;
     border:1px solid rgba(255,255,255,.12); border-radius:8px;
     box-shadow:0 10px 24px rgba(0,0,0,.4); padding:6px;
@@ -306,6 +382,7 @@ export function injectAutocompleteStyles() {
     width:40px; height:40px; user-select:none;
   }
   .emote-ac-item img{ width:100%; height:100%; object-fit:contain; border-radius:6px }
+  .emote-ac-item .emote-ac-glyph{ font-size:24px; line-height:1 }
   .emote-ac-item.active{ outline:2px solid #e53935 }
 
 `;
@@ -380,7 +457,10 @@ export function attachEmoteAutocomplete(panel, input) {
     const start = tokenPreview?.start ?? tokenInfo.start;
     const end = tokenPreview?.previewEnd ?? tokenInfo.end;
     input.setSelectionRange(start, end);       // replace current token
-    insertTokenWithSpaces(input, c.name);      // adds smart spaces
+    insertTokenWithSpaces(input, c.char || c.name); // emoji inserts its glyph
+    recordEmoteUse(c.char
+      ? { type: 'basic', name: c.name, char: c.char }
+      : { type: '7tv', name: c.name, url: c.url });
     tokenPreview = null;
     hide();
   }
@@ -406,6 +486,11 @@ export function attachEmoteAutocomplete(panel, input) {
         const img = document.createElement('img');
         img.src = c.url; img.alt = c.name; img.title = c.name;
         el.appendChild(img);
+      } else if (c.char) {
+        const glyph = document.createElement('span');
+        glyph.className = 'emote-ac-glyph';
+        glyph.textContent = c.char;
+        el.appendChild(glyph);
       }
       const label = document.createElement('span');
       label.className = 'emote-label';
@@ -477,19 +562,33 @@ export function attachEmoteAutocomplete(panel, input) {
   function listCandidates(prefix) {
     const ems = (typeof SevenTV !== 'undefined' && typeof SevenTV.listEmotes === 'function')
       ? SevenTV.listEmotes() : [];
+    const raw = prefix;            // original casing as typed
     const p = prefix.toLowerCase();
     return ems
       .filter(e => e.name && e.name.toLowerCase().startsWith(p))
       .sort((a, b) => {
-        const aName = a.name.toLowerCase();
-        const bName = b.name.toLowerCase();
-        // An exact match wins, then prefer the shorter/base emote name before
-        // extensions such as SadgeCry.
-        if ((aName === p) !== (bName === p)) return aName === p ? -1 : 1;
+        const aName = a.name, bName = b.name;
+        const aLow = aName.toLowerCase(), bLow = bName.toLowerCase();
+        // 1) Prefer emotes whose casing matches what was typed ("SAD" -> SADKEK
+        //    before sadge), so Tab doesn't surface a lowercase variant first.
+        const aCase = aName.startsWith(raw), bCase = bName.startsWith(raw);
+        if (aCase !== bCase) return aCase ? -1 : 1;
+        // 2) Exact (case-insensitive) name match.
+        if ((aLow === p) !== (bLow === p)) return aLow === p ? -1 : 1;
+        // 3) Shorter/base name before extensions such as SadgeCry.
         if (aName.length !== bName.length) return aName.length - bName.length;
-        return aName.localeCompare(bName, undefined, { numeric: true });
+        // 4) Alphabetical, numeric-aware.
+        return aLow.localeCompare(bLow, undefined, { numeric: true });
       })
       .map(e => ({ name: e.name, url: e.url || (Array.isArray(e.urls) ? e.urls[0] : null) }));
+  }
+
+  // Colon mode also matches emojis by name/keyword (emojis listed first); plain
+  // word mode stays 7TV-only so bare words never become emojis.
+  function candidatesFor(q) {
+    const seven = listCandidates(q.text);
+    if (q.mode !== 'colon') return seven;
+    return [...searchEmoji(q.text), ...seven];
   }
 
   // Keep popup live while editing
@@ -497,7 +596,7 @@ export function attachEmoteAutocomplete(panel, input) {
     const q = queryFromInput();
     if (!q) { hide(); return; }
     if (!q.text || q.text.length === 0) { hide(); return; }
-    const list = listCandidates(q.text);
+    const list = candidatesFor(q);
     if (list.length) open(list, q);
     else hide();
   }
@@ -517,7 +616,7 @@ input.addEventListener('input', () => {
   if (q.mode === 'colon') {
     // Require at least 1 char after ":" to show results
     if (q.text && q.text.length > 0) {
-      const list = listCandidates(q.text);
+      const list = candidatesFor(q);
       if (list.length) open(list, q); else hide();
     } else {
       hide(); // bare ":" -> keep closed
@@ -527,7 +626,7 @@ input.addEventListener('input', () => {
 
   // word mode: only update if already open (e.g., user opened via Tab)
   if (ac.style.display === 'block') {
-    const list = listCandidates(q.text);
+    const list = candidatesFor(q);
     if (list.length) open(list, q); else hide();
   } else {
     // keep closed while typing plain words
@@ -600,7 +699,7 @@ input.addEventListener('input', () => {
   setTimeout(() => {
     const q = queryFromInput();
     if (q && q.mode === 'colon' && q.text && q.text.length > 0) {
-      const list = listCandidates(q.text);
+      const list = candidatesFor(q);
       if (list.length) open(list, q);
       else hide();
     } else {

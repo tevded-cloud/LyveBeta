@@ -271,14 +271,14 @@
   background: #2b2b2b;
   border: 1px solid rgba(255,255,255,.16);
   border-radius: 999px;
-  bottom: 10px;
+  bottom: 6px;
   box-shadow: 0 4px 14px rgba(0,0,0,.4);
   color: #fff;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   left: 50%;
-  padding: 7px 11px;
+  padding: 4px 10px;
   position: absolute;
   transform: translateX(-50%);
   white-space: nowrap;
@@ -316,6 +316,13 @@
 }
 .chat-message-seek-return button{height:25px;padding:0 8px;border:0;border-radius:6px;background:#315fcf;color:#fff;cursor:pointer;font:700 10px Roboto,Arial,sans-serif}
 .chat-message-seek-return .chat-message-seek-dismiss{width:24px;padding:0;background:transparent;color:#999;font-size:17px}
+
+/* Shrink the scroll viewport while a floating bottom control is visible, so
+   messages end above it instead of being covered — even when scrolled up.
+   (Gracefully no-ops where :has() is unsupported, leaving prior behavior.) */
+#chat-panel:has(#chat-return-current:not([hidden])) #chat-messages { height: calc(100% - 34px); }
+#chat-panel:has(#chat-new-messages:not([hidden])) #chat-messages { height: calc(100% - 70px); }
+#chat-panel:has(.chat-message-seek-return) #chat-messages { height: calc(100% - 110px); }
 
 #chat-messages > .chat-unread-separator {
   display:flex;
@@ -606,14 +613,11 @@
 .chat-role-badge.role-moderator{background:#147d56;color:#eafff6}
 .chat-role-badge.role-member{background:#315a91;color:#e9f3ff}
 
+/* Status badges render as an icon next to the name (full name shown on hover). */
 .chat-account-badge{
-  display:inline-block;margin:0 3px;padding:1px 5px;border-radius:999px;
-  background:#272727;color:#d6d6d6;border:1px solid rgba(255,255,255,.12);
-  font-size:8px;font-weight:900;line-height:14px;text-transform:uppercase;vertical-align:1px;
+  display:inline-block;margin:0 2px 0 3px;font-size:12px;line-height:1;
+  vertical-align:-1px;cursor:help;
 }
-.chat-account-badge.badge-founder{background:#372811;color:#ffd37a;border-color:rgba(255,195,107,.24)}
-.chat-account-badge.badge-supporter{background:#172d24;color:#9ef1c5;border-color:rgba(117,225,170,.22)}
-.chat-account-badge.badge-member{background:#17223a;color:#b8cdfd;border-color:rgba(130,166,255,.22)}
 
 .chat-message-line {
   display: block;

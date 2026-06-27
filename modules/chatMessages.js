@@ -1,5 +1,17 @@
 import { getOrCreateUserId, getSetting } from "./settings.js";
 import { SevenTV } from "./emotes.js";
+import { censorMessageText, messageHasProfanity } from "./usernameFilter.js";
+
+// Status badges: rendered as an icon next to the name with the full name on hover.
+const BADGE_INFO = {
+  beta:      { icon: '🧪', label: 'Beta tester' },
+  moderator: { icon: '🛡️', label: 'Moderator' },
+  staff:     { icon: '⭐', label: 'Staff' },
+  // Legacy cosmetic badges (kept so older messages still render).
+  founder:   { icon: '🌱', label: 'Early account' },
+  supporter: { icon: '💜', label: 'Supporter' },
+  member:    { icon: '🎗️', label: 'Member' },
+};
 
 // Keep the original global variables (unchanged behavior)
 export let messages = [];
@@ -8,6 +20,7 @@ let _lastRenderKey = '';
 let _lastVisibleCount = 0;
 let _unreadCount = 0;
 let _unreadStartIndex = null;
+let _emptyStateShownAt = null;
 
 function createTimelineState() {
   const state = document.createElement('section');
@@ -23,17 +36,12 @@ function createTimelineState() {
 
   const title = document.createElement('strong');
   const text = document.createElement('span');
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.className = 'chat-timeline-state-action';
 
   title.textContent = 'No Lyve messages yet';
   text.textContent = 'Be the first to leave a timestamped message for this video.';
-  action.textContent = 'Start typing';
-  action.addEventListener('click', () => document.getElementById('chat-input')?.focus());
 
   copy.append(title, text);
-  state.append(icon, copy, action);
+  state.append(icon, copy);
   return state;
 }
 
@@ -42,6 +50,7 @@ function insertMessageSorted(msg) {
   // Product-stage moderation hook. The React/backend build can replace this
   // with server results while keeping the renderer's message-state contract.
   globalThis.lyveApplyAutoModeration?.(msg);
+  msg._autoModerated = true;
 
   // Monotonic tie-breaker stored on the function itself (no new globals)
   insertMessageSorted._seq = (insertMessageSorted._seq || 0) + 1;
@@ -108,7 +117,26 @@ function renderAtTime(currentTime, force = false) {
   boundary.dataset.currentTime = String(currentTime);
 
   if (messages.length === 0) {
-    chatMessages.appendChild(createTimelineState());
+    const emptyState = createTimelineState();
+    // In overlay mode, fade the placeholder out like messages — anchored to when
+    // it first appeared, so a re-render (e.g. on hover) resumes the fade via a
+    // negative animation-delay instead of restarting it from full opacity.
+    if (overlayActive && overlayFadeSeconds > 0) {
+      if (_emptyStateShownAt === null) _emptyStateShownAt = Date.now();
+      const elapsed = (Date.now() - _emptyStateShownAt) / 1000;
+      if (elapsed >= overlayFadeSeconds) {
+        emptyState.classList.add('chat-message-overlay-expired');
+      } else {
+        emptyState.classList.add('chat-message-overlay-fading');
+        emptyState.style.setProperty('--lyve-fade-remaining', `${overlayFadeSeconds}s`);
+        emptyState.style.animationDelay = `-${elapsed}s`;
+      }
+    } else {
+      _emptyStateShownAt = null;
+    }
+    chatMessages.appendChild(emptyState);
+  } else {
+    _emptyStateShownAt = null;
   }
 
   for (let i = 0; i < messages.length; i++) {
@@ -213,17 +241,13 @@ function renderAtTime(currentTime, force = false) {
           : 'Member';
       line.appendChild(roleBadge);
     }
-    const selfBadge = msg.userId && msg.userId === myUserId
-      ? String(msg.badge || getSetting('chatSelfBadge', 'none') || 'none')
-      : String(msg.badge || '');
-    if (selfBadge && selfBadge !== 'none') {
+    const badgeInfo = BADGE_INFO[String(msg.badge || '')];
+    if (badgeInfo) {
       const accountBadge = document.createElement('span');
-      accountBadge.className = `chat-account-badge badge-${selfBadge}`;
-      accountBadge.textContent = selfBadge === 'founder'
-        ? 'Early'
-        : selfBadge === 'supporter'
-          ? 'Supporter'
-          : 'Member';
+      accountBadge.className = `chat-account-badge badge-${msg.badge}`;
+      accountBadge.textContent = badgeInfo.icon;
+      accountBadge.title = badgeInfo.label;
+      accountBadge.setAttribute('aria-label', badgeInfo.label);
       line.appendChild(accountBadge);
     }
 
@@ -272,7 +296,16 @@ function renderAtTime(currentTime, force = false) {
         ? 'Message removed by AutoMod'
         : 'Message removed by a moderator';
     } else {
-      msgSpan.appendChild(SevenTV.replaceToFragment(msg.text || ''));
+      // Per-viewer profanity filter: off | censor (***) | hide whole message.
+      const profanityFilter = getSetting('chatProfanityFilter', 'off');
+      const rawText = msg.text || '';
+      if (profanityFilter === 'hide' && messageHasProfanity(rawText)) {
+        msgSpan.classList.add('chat-message-removed-text');
+        msgSpan.textContent = 'Message hidden by your profanity filter';
+      } else {
+        const shownText = profanityFilter === 'censor' ? censorMessageText(rawText) : rawText;
+        msgSpan.appendChild(SevenTV.replaceToFragment(shownText));
+      }
     }
     line.appendChild(msgSpan);
     row.appendChild(line);

@@ -344,6 +344,71 @@ async function signInWithEmailPassword(email, password) {
   return { ...auth, signedIn: true, isValid: true };
 }
 
+// --- Google Sign-In (basic scope -> Firebase signInWithIdp) --------------
+const GOOGLE_OAUTH_CLIENT_ID = '104738333455-fcpq78jg3p3n164668a4v434g8g4hv5m.apps.googleusercontent.com';
+
+// Run Google's OAuth flow for a basic-profile ID token (no sensitive scopes,
+// so no 100-user cap / verification review).
+function getGoogleIdToken() {
+  return new Promise((resolve, reject) => {
+    const redirectUri = chrome.identity.getRedirectURL();
+    const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const authUrl =
+      'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(GOOGLE_OAUTH_CLIENT_ID)
+      + '&response_type=' + encodeURIComponent('id_token token')
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&scope=' + encodeURIComponent('openid email profile')
+      + '&nonce=' + encodeURIComponent(nonce)
+      + '&prompt=select_account';
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, redirect => {
+      const error = chrome.runtime.lastError;
+      if (error || !redirect) {
+        reject(new Error(error?.message || 'Google sign-in was cancelled.'));
+        return;
+      }
+      const match = redirect.match(/[#&]id_token=([^&]+)/);
+      if (!match) { reject(new Error('No Google ID token returned.')); return; }
+      resolve({ idToken: decodeURIComponent(match[1]), redirectUri });
+    });
+  });
+}
+
+async function signInWithGoogle() {
+  const { idToken: googleIdToken, redirectUri } = await getGoogleIdToken();
+  const apiKey = getFirebaseApiKey();
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        postBody: `id_token=${googleIdToken}&providerId=google.com`,
+        requestUri: redirectUri,
+        returnSecureToken: true,
+        returnIdpCredential: true,
+      }),
+    },
+  );
+  const data = await readResponseJson(response);
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `HTTP ${response.status}`);
+  }
+  const auth = {
+    uid: String(data.localId || ''),
+    idToken: String(data.idToken || ''),
+    refreshToken: String(data.refreshToken || ''),
+    expiresAt: Date.now() + Math.max(0, Number(data.expiresIn || 3600)) * 1000,
+    email: String(data.email || ''),
+    displayName: String(data.displayName || data.fullName || ''),
+  };
+  if (!auth.uid || !auth.idToken || !auth.refreshToken) {
+    throw new Error('Google sign-in response was missing token data.');
+  }
+  await storeAccountAuth(auth);
+  return { ...auth, signedIn: true, isValid: true };
+}
+
 async function getAccountState() {
   const stored = await getStoredAccountAuth();
   if (!stored.signedIn) return { signedIn: false };
@@ -363,6 +428,53 @@ async function sendPasswordResetEmail(email) {
     email: cleanEmail,
   });
   return { email: cleanEmail };
+}
+
+// --- Channel verification (YouTube OAuth -> Cloud Function) ---------------
+const YOUTUBE_OAUTH_CLIENT_ID = '104738333455-fcpq78jg3p3n164668a4v434g8g4hv5m.apps.googleusercontent.com';
+const VERIFY_CHANNEL_URL = 'https://us-central1-lyve-d9c57.cloudfunctions.net/verifyChannel';
+
+// Run Google's OAuth flow to get a YouTube read-only access token.
+function getYouTubeAccessToken() {
+  return new Promise((resolve, reject) => {
+    const redirectUri = chrome.identity.getRedirectURL();
+    const authUrl =
+      'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(YOUTUBE_OAUTH_CLIENT_ID)
+      + '&response_type=token'
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly')
+      + '&prompt=consent';
+    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, redirect => {
+      const error = chrome.runtime.lastError;
+      if (error || !redirect) {
+        reject(new Error(error?.message || 'Channel verification was cancelled.'));
+        return;
+      }
+      const match = redirect.match(/[#&]access_token=([^&]+)/);
+      if (!match) { reject(new Error('No access token returned by Google.')); return; }
+      resolve(decodeURIComponent(match[1]));
+    });
+  });
+}
+
+// Verify the signed-in user owns a YouTube channel, via the backend.
+async function verifyChannelOwnership() {
+  const auth = await ensureAccountAuth(); // throws NOT_SIGNED_IN if signed out
+  const youtubeAccessToken = await getYouTubeAccessToken();
+  const response = await fetch(VERIFY_CHANNEL_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${auth.idToken}`,
+    },
+    body: JSON.stringify({ youtubeAccessToken }),
+  });
+  const data = await readResponseJson(response);
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || `Verification failed (HTTP ${response.status})`);
+  }
+  return data;
 }
 
 // Admin is granted by a Firestore admins/{uid} doc that only the project owner
@@ -673,6 +785,15 @@ async function handleLyveMessage(request) {
       }
     }
 
+    case 'LYVE_AUTH_GOOGLE': {
+      try {
+        const auth = await signInWithGoogle();
+        return { ok: true, action, signedIn: true, uid: auth.uid, email: auth.email, displayName: auth.displayName };
+      } catch (error) {
+        return { ok: false, action, error: error?.message || String(error) };
+      }
+    }
+
     case 'LYVE_AUTH_SIGNOUT': {
       try {
         await clearStoredAccountAuth();
@@ -706,6 +827,15 @@ async function handleLyveMessage(request) {
         return { ok: true, action, ...role };
       } catch (error) {
         return { ok: false, action, isAdmin: false, error: error?.message || String(error) };
+      }
+    }
+
+    case 'LYVE_VERIFY_CHANNEL': {
+      try {
+        const result = await verifyChannelOwnership();
+        return { ok: true, action, channelId: result.channelId, channelTitle: result.channelTitle };
+      } catch (error) {
+        return { ok: false, action, error: error?.message || String(error) };
       }
     }
 

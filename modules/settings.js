@@ -1,5 +1,6 @@
 // NEW helpers — settings persistence
 import { SevenTV, DEFAULT_7TV_SOURCE } from "./emotes.js";
+import { getUsernameRejection } from "./usernameFilter.js";
 
 function getSetting(key, fallback) {
   try {
@@ -28,7 +29,7 @@ function injectSettingsStyles() {
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 10px; padding: 10px;
       min-width: 300px; max-width: 360px;
-      z-index: 100000; display: none;
+      z-index: 2147483647; display: none;
       box-shadow: 0 10px 30px rgba(0,0,0,.45);
     }
     #chat-settings-popup .group { margin: 8px 0; }
@@ -194,6 +195,11 @@ function injectSettingsStyles() {
     #chat-settings-popup input[type="color"]::-webkit-color-swatch-wrapper{padding:0}
     #chat-settings-popup input[type="color"]::-webkit-color-swatch{border:0;border-radius:6px}
     #chat-settings-popup .color-value{color:#aaa;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;text-transform:uppercase}
+    #chat-settings-popup .color-palette{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:9px}
+    #chat-settings-popup .color-swatch{width:100%}
+    #chat-settings-popup .color-swatch{width:24px;height:24px;padding:0;border:2px solid transparent;border-radius:7px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);transition:transform .1s ease}
+    #chat-settings-popup .color-swatch:hover{transform:scale(1.1)}
+    #chat-settings-popup .color-swatch.selected{border-color:#fff;box-shadow:0 0 0 2px rgba(239,61,56,.65)}
     #chat-settings-popup .segmented{
       display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:4px;background:#0e0e0e;
       border:1px solid rgba(255,255,255,.08);border-radius:10px
@@ -302,10 +308,10 @@ function createSettingsUI(panel, header) {
   }));
   const storedColor = String(getSetting('chatUserColor', '#3a6ff7'));
   const userColor = /^#[0-9a-f]{6}$/i.test(storedColor) ? storedColor : '#3a6ff7';
-  const selfBadge = String(getSetting('chatSelfBadge', 'none') || 'none');
   const dock     = getSetting('chatDefaultDock', 'br');
   const showTS   = getSetting('chatShowTimestamps', true);
   const maxLen   = String(getSetting('chatMaxLen', 'unlimited') || 'unlimited');
+  const profanityFilter = String(getSetting('chatProfanityFilter', 'off') || 'off');
   const protectTyping = getSetting('chatProtectTypingShortcuts', true) === true;
   const blockNumberSeeking = getSetting('chatBlockYouTubeNumberHotkeys', true) === true;
   const displayMode = String(getSetting('chatDisplayMode', 'window') || 'window');
@@ -352,6 +358,8 @@ function createSettingsUI(panel, header) {
           <p class="card-copy">Sign in to post messages. Viewing chat doesn't require an account.</p>
 
           <div id="auth-signed-out" class="auth-view">
+            <button type="button" class="save" id="auth-google" style="width:100%;background:#fff;color:#1a1a1a;margin-bottom:10px">Continue with Google</button>
+            <div class="field-hint" style="text-align:center;margin:0 0 10px">or use email</div>
             <div class="field">
               <div class="segmented" role="radiogroup" aria-label="Account mode">
                 <label class="segment-choice">
@@ -393,6 +401,8 @@ function createSettingsUI(panel, header) {
                 <span class="profile-role" id="auth-account-email">&mdash;</span>
               </div>
             </div>
+            <button type="button" class="save" id="auth-verify-channel" style="width:100%;margin-bottom:8px">Verify my YouTube channel</button>
+            <div id="auth-channel-status" class="field-hint" role="status" aria-live="polite" style="margin-bottom:10px"></div>
             <button type="button" class="save" id="auth-signout" style="width:100%;background:#2a2a2a">Sign out</button>
             <div id="auth-status-in" class="field-hint" role="status" aria-live="polite" style="margin-top:6px"></div>
           </div>
@@ -429,21 +439,15 @@ function createSettingsUI(panel, header) {
           <div class="card-title">Appearance</div>
           <p class="card-copy">These are personal chat styling choices. They do not grant roles or moderation access.</p>
           <div class="field">
-            <label class="field-label" for="set-user-color">Username color</label>
+            <label class="field-label">Username color</label>
+            <div class="color-palette" id="settings-color-palette" role="group" aria-label="Preset username colors">
+              ${['#3a6ff7','#e53935','#43a047','#fb8c00','#8e24aa','#00acc1','#fdd835','#ec407a','#ff7043','#00bcd4','#c0ca33','#ffffff'].map(c => `<button type="button" class="color-swatch${c.toLowerCase()===userColor.toLowerCase()?' selected':''}" data-color="${c}" style="background:${c}" title="${c}" aria-label="${c}"></button>`).join('')}
+            </div>
             <div class="color-control">
-              <input id="set-user-color" type="color" value="${userColor}" />
+              <input id="set-user-color" type="color" value="${userColor}" aria-label="Custom username color" />
               <span class="color-value" id="settings-color-value">${userColor}</span>
             </div>
-          </div>
-          <div class="field">
-            <label class="field-label" for="set-self-badge">Chat badge</label>
-            <select id="set-self-badge">
-              <option value="none" ${selfBadge==='none'?'selected':''}>No badge</option>
-              <option value="founder" ${selfBadge==='founder'?'selected':''}>Early account</option>
-              <option value="supporter" ${selfBadge==='supporter'?'selected':''}>Supporter-style</option>
-              <option value="member" ${selfBadge==='member'?'selected':''}>Member-style</option>
-            </select>
-            <span class="field-hint">Badges are local appearance scaffolding until real accounts exist.</span>
+            <span class="field-hint">Pick a preset, or use the swatch for any custom color.</span>
           </div>
         </div>
       </section>
@@ -508,6 +512,15 @@ function createSettingsUI(panel, header) {
               <option value="100" ${maxLen==='100'?'selected':''}>100 characters</option>
             </select>
             <span class="field-hint">Limits how much of long messages is shown at once.</span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="set-profanity-filter">Profanity filter</label>
+            <select id="set-profanity-filter">
+              <option value="off" ${profanityFilter==='off'?'selected':''}>Off</option>
+              <option value="censor" ${profanityFilter==='censor'?'selected':''}>Censor words (***)</option>
+              <option value="hide" ${profanityFilter==='hide'?'selected':''}>Hide message</option>
+            </select>
+            <span class="field-hint">Filters profanity in the messages you see — your preference only.</span>
           </div>
         </div>
         <div class="settings-card">
@@ -615,8 +628,9 @@ function createSettingsUI(panel, header) {
       details.className = `${card.className} settings-collapsible`.trim();
       const sectionKey = `chatSettingsSection:${panelName}:${titleText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
       details.dataset.sectionKey = sectionKey;
-      const storedState = localStorage.getItem(sectionKey);
-      details.open = storedState === 'open';
+      // Start collapsed on a fresh open. The open/closed state then lives only in
+      // the DOM for this session, so it persists until the page is refreshed.
+      details.open = false;
 
       const summary = document.createElement('summary');
       summary.className = 'settings-card-summary';
@@ -643,7 +657,6 @@ function createSettingsUI(panel, header) {
       while (card.firstChild) body.appendChild(card.firstChild);
       details.append(summary, body);
       details.addEventListener('toggle', () => {
-        try { localStorage.setItem(sectionKey, details.open ? 'open' : 'closed'); } catch {}
         if (popup.style.display === 'block') positionPopup();
       });
       card.replaceWith(details);
@@ -718,7 +731,19 @@ function createSettingsUI(panel, header) {
     previewAvatar.style.background = color;
     colorValue.textContent = color;
   }
-  colorInput.addEventListener('input', updateProfilePreview);
+  const colorSwatches = Array.from(popup.querySelectorAll('.color-swatch'));
+  function syncColorSwatches() {
+    const current = (colorInput.value || '').toLowerCase();
+    colorSwatches.forEach(s => s.classList.toggle('selected', s.dataset.color.toLowerCase() === current));
+  }
+  colorSwatches.forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      colorInput.value = swatch.dataset.color;
+      updateProfilePreview();
+      syncColorSwatches();
+    });
+  });
+  colorInput.addEventListener('input', () => { updateProfilePreview(); syncColorSwatches(); });
 
   const enable7Input = popup.querySelector('#set-7tv-enable');
   const source7Input = popup.querySelector('#set-7tv-source');
@@ -818,10 +843,10 @@ function createSettingsUI(panel, header) {
     const prevOverlayCorner = String(getSetting('chatOverlayCorner', 'br') || 'br');
 
     const color   = popup.querySelector('#set-user-color').value || '#3a6ff7';
-    const badge   = popup.querySelector('#set-self-badge')?.value || 'none';
     const dockSel = popup.querySelector('input[name="dock"]:checked')?.value || 'br';
     const ts      = popup.querySelector('#set-show-ts').checked;
     const ml      = popup.querySelector('#set-max-len').value || 'unlimited';
+    const profanity = popup.querySelector('#set-profanity-filter')?.value || 'off';
     const protectTypingValue = popup.querySelector('#set-protect-typing').checked;
     const blockNumberSeekingValue = popup.querySelector('#set-block-number-hotkeys').checked;
     const displayModeValue = popup.querySelector('#set-display-mode').value || 'window';
@@ -832,10 +857,10 @@ function createSettingsUI(panel, header) {
     const src     = (popup.querySelector('#set-7tv-source').value || '').trim();
 
     setSetting('chatUserColor', color);
-    setSetting('chatSelfBadge', badge);
     setSetting('chatDefaultDock', dockSel);
     setSetting('chatShowTimestamps', ts);
     setSetting('chatMaxLen', ml);
+    setSetting('chatProfanityFilter', profanity);
     setSetting('chatProtectTypingShortcuts', protectTypingValue);
     setSetting('chatBlockYouTubeNumberHotkeys', blockNumberSeekingValue);
     setSetting('chatDisplayMode', displayModeValue);
@@ -1101,6 +1126,10 @@ function wireAccountAuthUI(popup) {
       setStatus('Please fill in all fields.', 'error');
       return;
     }
+    if (mode === 'signup') {
+      const usernameIssue = getUsernameRejection(username);
+      if (usernameIssue) { setStatus(usernameIssue, 'error'); return; }
+    }
     setBusy(true);
     setStatus(mode === 'signup' ? 'Creating account…' : 'Signing in…');
     const type = mode === 'signup' ? 'LYVE_AUTH_SIGNUP' : 'LYVE_AUTH_SIGNIN';
@@ -1109,7 +1138,11 @@ function wireAccountAuthUI(popup) {
     setBusy(false);
     if (res?.ok && res.signedIn) {
       const name = res.displayName || username || '';
-      if (name) setSetting('chatDisplayName', name);
+      // On sign-up adopt the chosen username; on sign-in only adopt the account
+      // name when the user hasn't already picked a custom local one.
+      const keepLocalName = mode === 'signin'
+        && !['', 'You'].includes(String(getSetting('chatDisplayName', 'You') || '').trim());
+      if (name && !keepLocalName) setSetting('chatDisplayName', name);
       passwordInput.value = '';
       window.dispatchEvent(new CustomEvent('lyve:auth-changed'));
       showSignedIn(res);
@@ -1136,6 +1169,22 @@ function wireAccountAuthUI(popup) {
     else setStatus(friendlyAuthError(res?.error), 'error');
   });
 
+  const googleBtn = popup.querySelector('#auth-google');
+  googleBtn?.addEventListener('click', async () => {
+    googleBtn.disabled = true;
+    setStatus('Opening Google sign-in…');
+    const res = await sendBackgroundRequest('LYVE_AUTH_GOOGLE');
+    googleBtn.disabled = false;
+    if (res?.ok && res.signedIn) {
+      const keepLocalName = !['', 'You'].includes(String(getSetting('chatDisplayName', 'You') || '').trim());
+      if (res.displayName && !keepLocalName) setSetting('chatDisplayName', res.displayName);
+      window.dispatchEvent(new CustomEvent('lyve:auth-changed'));
+      showSignedIn(res);
+    } else {
+      setStatus(friendlyAuthError(res?.error), 'error');
+    }
+  });
+
   signoutBtn.addEventListener('click', async () => {
     signoutBtn.disabled = true;
     const res = await sendBackgroundRequest('LYVE_AUTH_SIGNOUT');
@@ -1146,6 +1195,23 @@ function wireAccountAuthUI(popup) {
     } else {
       statusIn.textContent = 'Sign out failed. Try again.';
       statusIn.style.color = '#ff6b6b';
+    }
+  });
+
+  const verifyChannelBtn = popup.querySelector('#auth-verify-channel');
+  const channelStatus = popup.querySelector('#auth-channel-status');
+  verifyChannelBtn?.addEventListener('click', async () => {
+    verifyChannelBtn.disabled = true;
+    channelStatus.textContent = 'Opening Google sign-in…';
+    channelStatus.style.color = '#727272';
+    const res = await sendBackgroundRequest('LYVE_VERIFY_CHANNEL');
+    verifyChannelBtn.disabled = false;
+    if (res?.ok) {
+      channelStatus.textContent = 'Verified channel: ' + (res.channelTitle || res.channelId);
+      channelStatus.style.color = '#6bd28a';
+    } else {
+      channelStatus.textContent = res?.error || 'Verification failed.';
+      channelStatus.style.color = '#ff6b6b';
     }
   });
 

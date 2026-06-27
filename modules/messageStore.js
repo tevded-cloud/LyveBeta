@@ -8,7 +8,7 @@ const subscribersByVideo = new Map();
 const pollTimersByVideo = new Map();
 let authInitPromise = null;
 
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 10000;
 
 function sendBackgroundMessage(type, payload = {}) {
   if (!globalThis.chrome?.runtime?.sendMessage) return Promise.resolve(null);
@@ -105,6 +105,13 @@ function upsertMessageInBucket(videoId, message) {
     sortMessagesInPlace(bucket);
     return false;
   }
+  // Run client-side auto-moderation once per message. Messages received from
+  // other users arrive here (not through the renderer's insert hook), so this
+  // is where their profanity/ban filtering gets applied.
+  if (!message._autoModerated) {
+    globalThis.lyveApplyAutoModeration?.(message);
+    message._autoModerated = true;
+  }
   bucket.push(message);
   sortMessagesInPlace(bucket);
   return true;
@@ -166,7 +173,9 @@ async function pollMessagesForVideo(videoId) {
 function startPollingForVideo(videoId) {
   const key = normalizeVideoId(videoId);
   if (pollTimersByVideo.has(key)) return;
-  // Immediate refresh, then poll every 5s while the video stays active.
+  // Don't poll while the tab is hidden — it resumes on visibilitychange.
+  if (typeof document !== 'undefined' && document.hidden) return;
+  // Immediate refresh, then poll on an interval while the video stays active.
   pollMessagesForVideo(key).catch(error => console.debug('Lyve polling failed:', error));
   const timer = setInterval(() => {
     pollMessagesForVideo(key).catch(error => console.debug('Lyve polling failed:', error));
@@ -180,6 +189,22 @@ function stopPollingForVideo(videoId) {
   if (timer === undefined) return;
   clearInterval(timer);
   pollTimersByVideo.delete(key);
+}
+
+// Pause polling while the tab is hidden to save Firestore reads; resume with an
+// immediate catch-up poll when it becomes visible again.
+function handlePollVisibilityChange() {
+  if (document.hidden) {
+    for (const timer of pollTimersByVideo.values()) clearInterval(timer);
+    pollTimersByVideo.clear();
+  } else {
+    for (const [key, subscribers] of subscribersByVideo) {
+      if (subscribers?.size) startPollingForVideo(key);
+    }
+  }
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', handlePollVisibilityChange);
 }
 
 async function saveMessageForVideo(videoId, message) {

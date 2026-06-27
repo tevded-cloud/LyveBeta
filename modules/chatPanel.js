@@ -377,7 +377,7 @@ function insertToggleButton() {
       #toggle-live-chat-btn:focus, #toggle-live-chat-btn:focus-visible { outline:none!important; box-shadow:none!important; }
       #toggle-live-chat-btn {
         display:inline-flex!important; align-items:center!important; justify-content:center!important;
-        width:36px!important; height:36px!important; padding:0!important; margin:0 8px 0 0!important;
+        width:48px!important; height:48px!important; padding:0!important; margin:0!important;
         background:transparent!important; border:none!important; line-height:0; vertical-align:middle;
       }
       #toggle-live-chat-btn .lyve-switch { margin:0!important; }
@@ -395,7 +395,7 @@ function insertToggleButton() {
         position:fixed!important; top:72px!important; right:20px!important;
         z-index:10002!important; box-shadow:0 4px 14px rgba(0,0,0,.35)!important;
       }
-      #lyve-player-settings-btn,#lyve-overlay-toggle-btn{display:inline-grid!important;place-items:center!important;width:36px!important;height:36px!important;padding:0!important;color:#fff!important;background:transparent!important;border:0!important}
+      #lyve-player-settings-btn,#lyve-overlay-toggle-btn{display:inline-grid!important;place-items:center!important;width:48px!important;height:48px!important;padding:0!important;color:#fff!important;background:transparent!important;border:0!important}
       #lyve-player-settings-btn svg,#lyve-overlay-toggle-btn svg{width:18px;height:18px}
       #lyve-overlay-toggle-btn[data-on="true"]{color:#ff6661!important}
     `;
@@ -1189,7 +1189,7 @@ window.isLocked = isLocked;
       accountCreatedAt: getOrCreateAccountCreatedAt(),
       user: myName,
       color: getSetting('chatUserColor', '#3a6ff7'),
-      badge: getSetting('chatSelfBadge', 'none'),
+      badge: account.signedIn ? (isAdmin() ? 'staff' : 'beta') : 'none',
       text: messageText,
       time: Math.floor(video.currentTime),
       created_at: Clock.nowISO(),
@@ -1584,6 +1584,16 @@ window.isLocked = isLocked;
   };
   panel._historyFadeCleanup = clearHistoryBatchFade;
   function updateTimelineBrowseState() {
+    // No messages — nothing to browse, so never enter the "away" state.
+    if (!chatMessagesEl.querySelector('.chat-message-row')) {
+      chatMessagesEl.dataset.awayFromCurrent = 'false';
+      chatMessagesEl.dataset.browsingAhead = 'false';
+      panel.classList.remove('lyve-browsing-history');
+      returnToCurrentBtn.hidden = true;
+      newMessagesBtn.hidden = true;
+      timelineWasAwayFromCurrent = false;
+      return;
+    }
     const firstFuture = chatMessagesEl.querySelector('.chat-message-future');
     const boundary = chatMessagesEl.querySelector('.chat-current-boundary');
     const browsingAhead = !!firstFuture &&
@@ -1622,6 +1632,22 @@ window.isLocked = isLocked;
     newMessagesBtn.hidden = count === 0;
   };
   chatMessagesEl.addEventListener('scroll', updateTimelineBrowseState, { passive: true });
+  // Don't let the user scroll up into the empty spacer above the first message.
+  // The floor is the first message's top, but never past the current-time rest
+  // position, so the bottom-pinned view of a short chat is preserved.
+  chatMessagesEl.addEventListener('scroll', () => {
+    // Empty chat — nothing to scroll, keep it pinned to the top.
+    if (!chatMessagesEl.querySelector('.chat-message-row')) {
+      if (chatMessagesEl.scrollTop !== 0) chatMessagesEl.scrollTop = 0;
+      return;
+    }
+    const boundary = chatMessagesEl.querySelector('.chat-current-boundary');
+    const firstRow = chatMessagesEl.querySelector('.chat-message-row:not(.chat-message-future)');
+    if (!boundary || !firstRow) return;
+    const currentTop = Math.max(0, boundary.offsetTop - chatMessagesEl.clientHeight);
+    const minScroll = Math.min(firstRow.offsetTop, currentTop);
+    if (chatMessagesEl.scrollTop < minScroll) chatMessagesEl.scrollTop = minScroll;
+  }, { passive: true });
   chatMessagesEl.addEventListener('lyve:chat-rendered', () => {
     updateTimelineBrowseState();
     updateUnreadIndicator();
