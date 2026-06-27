@@ -35,6 +35,11 @@
     <li><strong>Email address</strong> — used to create and sign in to your Lyve account.</li>
     <li><strong>Password</strong> — entered to authenticate. It is transmitted directly to Google
       Firebase Authentication and is <em>not</em> stored or readable by the extension.</li>
+    <li><strong>Google account information</strong> — if you choose "Sign in with Google," we receive
+      your name and email address from Google to create or sign in to your Lyve account.</li>
+    <li><strong>YouTube channel information</strong> — if you choose to verify channel ownership, Lyve
+      reads your YouTube channel ID and name (with your permission, via Google) solely to confirm you
+      own the channel. We do not access your videos, watch history, or other YouTube data.</li>
     <li><strong>Display name / username</strong> — shown next to your messages.</li>
     <li><strong>Chat messages</strong> — the text you post, along with the YouTube
       <strong>video ID</strong> and the video timestamp the message is anchored to.</li>
@@ -49,16 +54,18 @@
 
   <h2>3. How we use data</h2>
   <ul>
-    <li>To authenticate your account and keep you signed in.</li>
+    <li>To authenticate your account (email/password or Google) and keep you signed in.</li>
     <li>To store chat messages and display them to other users watching the same video.</li>
+    <li>To verify YouTube channel ownership for creators who opt in, and to enable channel-scoped moderation.</li>
     <li>To manage access during the private beta (an approved-users allowlist).</li>
     <li>To remember your local chat preferences.</li>
   </ul>
 
   <h2>4. Where data is stored and processed</h2>
-  <p>Account and message data are stored using <strong>Google Firebase</strong> (Firebase
-  Authentication and Cloud Firestore), running on Google Cloud infrastructure. Authentication
-  tokens and preferences are stored locally in your browser. All network communication uses HTTPS.</p>
+  <p>Account and message data are stored using <strong>Google Firebase</strong> (Authentication and
+  Cloud Firestore) and processed by <strong>Google Cloud Functions</strong>, running on Google Cloud
+  infrastructure. Authentication tokens and preferences are stored locally in your browser. All
+  network communication uses HTTPS.</p>
 
   <h2>5. Sharing and disclosure</h2>
   <p>We do <strong>not</strong> sell your data, and we do not share it with third parties for
